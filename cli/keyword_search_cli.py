@@ -2,7 +2,7 @@
 
 import json
 import argparse
-
+import string
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
@@ -22,11 +22,17 @@ def main() -> None:
                 print("Error: movies.json file not found.")
                 return
 
-            query = args.query.lower()
+            translator = str.maketrans("", "", string.punctuation)
+
+            query = args.query.lower().translate(translator)
+
             results = []
 
             for movie in data.get("movies", []):
-                if query in movie.get("title", "").lower():
+                title = movie.get("title", "")
+                clean_title = title.lower().translate(translator)
+
+                if query in clean_title:
                     results.append(movie)
 
             results.sort(key=lambda x: x.get("id", 0))
@@ -41,7 +47,6 @@ def main() -> None:
 
         case _:
             parser.print_help()
-
 
 if __name__ == "__main__":
     main()
