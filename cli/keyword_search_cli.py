@@ -24,15 +24,26 @@ def main() -> None:
 
             translator = str.maketrans("", "", string.punctuation)
 
-            query = args.query.lower().translate(translator)
+            query_raw = args.query.lower().translate(translator)
+            query_tokens = query_raw.split()
 
             results = []
 
             for movie in data.get("movies", []):
-                title = movie.get("title", "")
-                clean_title = title.lower().translate(translator)
+                title_raw = movie.get("title", "").lower().translate(translator)
 
-                if query in clean_title:
+                title_tokens = title_raw.split()
+
+                match_found = False
+                for q_token in query_tokens:
+                    for t_token in title_tokens:
+                        if q_token in t_token:
+                            match_found = True
+                            break
+                    if match_found:
+                        break
+
+                if match_found:
                     results.append(movie)
 
             results.sort(key=lambda x: x.get("id", 0))
