@@ -4,6 +4,8 @@ import json
 import argparse
 import string
 
+from nltk.stem import PorterStemmer
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -16,6 +18,7 @@ def main() -> None:
     match args.command:
         case "search":
             # 1. Load Movies Data
+            stemmer = PorterStemmer() # stemmer instance
             try:
                 with open("data/movies.json", "r", encoding="utf-8") as f:
                     data = json.load(f)
@@ -36,9 +39,13 @@ def main() -> None:
             translator = str.maketrans("", "", string.punctuation)
 
             # 4. Tokenize and Filter Query
-            # lowercase -> remove punctuation -> split -> remove stop words
+            # lowercase -> remove punctuation -> split -> remove stop words -> stemming
             query_raw = args.query.lower().translate(translator)
-            query_tokens = [word for word in query_raw.split() if word not in stop_words]
+            query_tokens = [
+                    stemmer.stem(word) # stemming each token
+                    for word in query_raw.split()
+                    if word not in stop_words
+            ]
 
             results = []
 
@@ -48,7 +55,11 @@ def main() -> None:
 
                 # Tokenize and Filter Title
                 title_raw = title.lower().translate(translator)
-                title_tokens = [word for word in title_raw.split() if word not in stop_words]
+                title_tokens = [
+                        stemmer.stem(word) # stemming each token
+                        for word in title_raw.split()
+                        if word not in stop_words
+                ]
 
                 # Matching logic: Check if any query token is a substring of any title token
                 match_found = False
