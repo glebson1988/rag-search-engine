@@ -5,6 +5,7 @@ import argparse
 import string
 
 from nltk.stem import PorterStemmer
+from lib.keyword_search import InvertedIndex
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
@@ -12,6 +13,7 @@ def main() -> None:
 
     search_parser = subparsers.add_parser("search", help="Search movies using BM25")
     search_parser.add_argument("query", type=str, help="Search query")
+    subparsers.add_parser("build", help="Build and cache the inverted index")
 
     args = parser.parse_args()
 
@@ -85,6 +87,14 @@ def main() -> None:
             else:
                 for i, movie in enumerate(final_results, 1):
                     print(f"{i}. {movie['title']}")
+
+        case "build":
+            index = InvertedIndex()
+            index.build()
+            index.save()
+            merida_documents = index.get_documents("merida")
+            first_id = merida_documents[0] if merida_documents else None
+            print(f"First document id for token 'merida': {first_id}")
 
         case _:
             parser.print_help()
