@@ -12,6 +12,9 @@ def main() -> None:
     search_parser = subparsers.add_parser("search", help="Search movies using inverted index")
     search_parser.add_argument("query", type=str, help="Search query")
     subparsers.add_parser("build", help="Build and cache the inverted index")
+    tf_parser = subparsers.add_parser("tf", help="Get term frequency for a document")
+    tf_parser.add_argument("doc_id", type=int, help="Document ID")
+    tf_parser.add_argument("term", type=str, help="Term to inspect")
 
     args = parser.parse_args()
 
@@ -53,6 +56,15 @@ def main() -> None:
             index.build()
             index.save()
             print("Inverted index built and saved.")
+
+        case "tf":
+            try:
+                index = InvertedIndex()
+                index.load()
+            except FileNotFoundError:
+                print("Error: index not found. Run `build` first.")
+                return
+            print(index.get_tf(args.doc_id, args.term))
 
         case _:
             parser.print_help()
