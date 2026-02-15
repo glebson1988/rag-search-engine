@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import math
 
 from lib.keyword_search import InvertedIndex
 from lib.search_utils import tokenize_text
@@ -15,6 +16,8 @@ def main() -> None:
     tf_parser = subparsers.add_parser("tf", help="Get term frequency for a document")
     tf_parser.add_argument("doc_id", type=int, help="Document ID")
     tf_parser.add_argument("term", type=str, help="Term to inspect")
+    idf_parser = subparsers.add_parser("idf", help="Get inverse document frequency for a term")
+    idf_parser.add_argument("term", type=str, help="Term to inspect")
 
     args = parser.parse_args()
 
@@ -65,6 +68,18 @@ def main() -> None:
                 print("Error: index not found. Run `build` first.")
                 return
             print(index.get_tf(args.doc_id, args.term))
+
+        case "idf":
+            try:
+                index = InvertedIndex()
+                index.load()
+            except FileNotFoundError:
+                print("Error: index not found. Run `build` first.")
+                return
+            total_doc_count = len(index.docmap)
+            term_match_doc_count = len(index.get_documents(args.term))
+            idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
+            print(f"Inverse document frequency of '{args.term}': {idf:.2f}")
 
         case _:
             parser.print_help()
