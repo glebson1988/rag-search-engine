@@ -1,5 +1,6 @@
 import os
 import pickle
+import math
 from collections import Counter, defaultdict
 
 from .search_utils import CACHE_DIR, load_movies
@@ -77,3 +78,23 @@ class InvertedIndex:
         if not tokens:
             return 0
         return self.term_frequencies.get(doc_id, Counter()).get(tokens[0], 0)
+
+    def get_bm25_idf(self, term: str) -> float:
+        tokens = tokenize_text(term)
+        if len(tokens) > 1:
+            raise ValueError("term must tokenize to a single token")
+        if not tokens:
+            return 0.0
+
+        total_doc_count = len(self.docmap)
+        term_match_doc_count = len(self.index.get(tokens[0], set()))
+        return math.log(
+            ((total_doc_count - term_match_doc_count + 0.5) / (term_match_doc_count + 0.5))
+            + 1
+        )
+
+
+def bm25_idf_command(term: str) -> float:
+    index = InvertedIndex()
+    index.load()
+    return index.get_bm25_idf(term)

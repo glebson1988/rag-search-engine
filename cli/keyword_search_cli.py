@@ -4,6 +4,7 @@ import argparse
 import math
 
 from lib.keyword_search import InvertedIndex
+from lib.keyword_search import bm25_idf_command
 from lib.search_utils import tokenize_text
 
 def main() -> None:
@@ -21,6 +22,8 @@ def main() -> None:
     tfidf_parser = subparsers.add_parser("tfidf", help="Get TF-IDF score for a document and term")
     tfidf_parser.add_argument("doc_id", type=int, help="Document ID")
     tfidf_parser.add_argument("term", type=str, help="Term to inspect")
+    bm25_idf_parser = subparsers.add_parser("bm25idf", help="Get BM25 IDF score for a given term")
+    bm25_idf_parser.add_argument("term", type=str, help="Term to get BM25 IDF score for")
 
     args = parser.parse_args()
 
@@ -97,6 +100,14 @@ def main() -> None:
             idf = math.log((total_doc_count + 1) / (term_match_doc_count + 1))
             tf_idf = tf * idf
             print(f"TF-IDF score of '{args.term}' in document '{args.doc_id}': {tf_idf:.2f}")
+
+        case "bm25idf":
+            try:
+                bm25idf = bm25_idf_command(args.term)
+            except FileNotFoundError:
+                print("Error: index not found. Run `build` first.")
+                return
+            print(f"BM25 IDF score of '{args.term}': {bm25idf:.2f}")
 
         case _:
             parser.print_help()
