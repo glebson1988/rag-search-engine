@@ -10,6 +10,7 @@ DATA_DIR = ROOT_DIR / "data"
 CACHE_DIR = str(ROOT_DIR / "cache")
 MOVIES_PATH = DATA_DIR / "movies.json"
 STOPWORDS_PATH = DATA_DIR / "stopwords.txt"
+BM25_B = 0.75
 
 _STEMMER = PorterStemmer()
 _PUNCT_TRANSLATOR = str.maketrans("", "", string.punctuation)
