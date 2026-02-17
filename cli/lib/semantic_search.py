@@ -14,10 +14,11 @@ class SemanticSearch:
         self.document_map = {}
         self.embeddings_path = os.path.join(CACHE_DIR, "movie_embeddings.npy")
 
-    def generate_embedding(self, text: str) -> list[float]:
+    def generate_embedding(self, text: str):
         if not text or not text.strip():
             raise ValueError("text must not be empty")
-        return self.model.encode(text).tolist()
+        cleaned_text = text.strip()
+        return self.model.encode(cleaned_text)
 
     def build_embeddings(self, documents: list[dict]):
         self.documents = documents
@@ -47,6 +48,14 @@ def verify_model() -> None:
 def embed_text(text: str) -> list[float]:
     semantic_search = SemanticSearch()
     return semantic_search.generate_embedding(text)
+
+
+def embed_query_text(query: str) -> None:
+    semantic_search = SemanticSearch()
+    embedding = semantic_search.generate_embedding(query)
+    print(f"Query: {query}")
+    print(f"First 5 dimensions: {embedding[:5]}")
+    print(f"Shape: {embedding.shape}")
 
 
 def verify_embeddings() -> None:
