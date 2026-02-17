@@ -6,6 +6,17 @@ from sentence_transformers import SentenceTransformer
 from .search_utils import CACHE_DIR, load_movies
 
 
+def cosine_similarity(vec1, vec2):
+    dot_product = np.dot(vec1, vec2)
+    norm1 = np.linalg.norm(vec1)
+    norm2 = np.linalg.norm(vec2)
+
+    if norm1 == 0 or norm2 == 0:
+        return 0.0
+
+    return dot_product / (norm1 * norm2)
+
+
 class SemanticSearch:
     def __init__(self) -> None:
         self.model = SentenceTransformer("all-MiniLM-L6-v2")
@@ -37,6 +48,27 @@ class SemanticSearch:
             if len(self.embeddings) == len(documents):
                 return self.embeddings
         return self.build_embeddings(documents)
+
+    def search(self, query: str, limit: int):
+        if self.embeddings is None:
+            raise ValueError("No embeddings loaded. Call `load_or_create_embeddings` first.")
+
+        query_embedding = self.generate_embedding(query)
+        scored_documents: list[tuple[float, dict]] = []
+        for i, document_embedding in enumerate(self.embeddings):
+            similarity = cosine_similarity(query_embedding, document_embedding)
+            scored_documents.append((similarity, self.documents[i]))
+
+        scored_documents.sort(key=lambda item: item[0], reverse=True)
+        top_matches = scored_documents[:limit]
+        return [
+            {
+                "score": score,
+                "title": document["title"],
+                "description": document["description"],
+            }
+            for score, document in top_matches
+        ]
 
 
 def verify_model() -> None:
