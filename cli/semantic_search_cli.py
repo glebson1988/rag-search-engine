@@ -1,6 +1,7 @@
 #!/usr/bin/env python3
 
 import argparse
+import re
 
 from lib.semantic_search import embed_text
 from lib.semantic_search import embed_query_text
@@ -29,6 +30,16 @@ def main():
     )
     chunk_parser.add_argument(
         "--overlap", type=int, default=0, help="Number of overlapping words between chunks"
+    )
+    semantic_chunk_parser = subparsers.add_parser(
+        "semantic_chunk", help="Split text into sentence-based semantic chunks"
+    )
+    semantic_chunk_parser.add_argument("text", type=str, help="Text to chunk")
+    semantic_chunk_parser.add_argument(
+        "--max-chunk-size", type=int, default=4, help="Maximum number of sentences per chunk"
+    )
+    semantic_chunk_parser.add_argument(
+        "--overlap", type=int, default=0, help="Number of overlapping sentences between chunks"
     )
     args = parser.parse_args()
 
@@ -71,6 +82,26 @@ def main():
                 start += step
 
             print(f"Chunking {len(args.text)} characters")
+            for i, chunk in enumerate(chunks, start=1):
+                print(f"{i}. {chunk}")
+        case "semantic_chunk":
+            if args.max_chunk_size <= 0:
+                raise ValueError("max chunk size must be greater than 0")
+            if args.overlap < 0:
+                raise ValueError("overlap must be greater than or equal to 0")
+            if args.overlap >= args.max_chunk_size:
+                raise ValueError("overlap must be less than max chunk size")
+
+            sentences = [s for s in re.split(r"(?<=[.!?])\s+", args.text.strip()) if s]
+            chunks = []
+            start = 0
+            step = args.max_chunk_size - args.overlap
+            while start < len(sentences):
+                chunk_sentences = sentences[start : start + args.max_chunk_size]
+                chunks.append(" ".join(chunk_sentences))
+                start += step
+
+            print(f"Semantically chunking {len(args.text)} characters")
             for i, chunk in enumerate(chunks, start=1):
                 print(f"{i}. {chunk}")
         case _:
