@@ -22,6 +22,11 @@ def main():
     search_parser = subparsers.add_parser("search", help="Search movies using semantic similarity")
     search_parser.add_argument("query", type=str, help="Search query")
     search_parser.add_argument("--limit", type=int, default=5, help="Maximum number of results")
+    chunk_parser = subparsers.add_parser("chunk", help="Split text into fixed-size word chunks")
+    chunk_parser.add_argument("text", type=str, help="Text to chunk")
+    chunk_parser.add_argument(
+        "--chunk-size", type=int, default=200, help="Chunk size in words"
+    )
     args = parser.parse_args()
 
     match args.command:
@@ -45,6 +50,17 @@ def main():
                 preview = description[:120] + "..." if len(description) > 120 else description
                 print(f"{i}. {result['title']} (score: {result['score']:.4f})")
                 print(f"   {preview}\n")
+        case "chunk":
+            words = args.text.split()
+            if args.chunk_size <= 0:
+                raise ValueError("chunk size must be greater than 0")
+            chunks = [
+                " ".join(words[i : i + args.chunk_size])
+                for i in range(0, len(words), args.chunk_size)
+            ]
+            print(f"Chunking {len(args.text)} characters")
+            for i, chunk in enumerate(chunks, start=1):
+                print(f"{i}. {chunk}")
         case _:
             parser.print_help()
 
