@@ -7,6 +7,8 @@ from sentence_transformers import SentenceTransformer
 
 from .search_utils import CACHE_DIR, load_movies
 
+SCORE_PRECISION = 4
+
 
 def cosine_similarity(vec1, vec2):
     dot_product = np.dot(vec1, vec2)
@@ -160,6 +162,51 @@ class ChunkedSemanticSearch(SemanticSearch):
                 return self.chunk_embeddings
 
         return self.build_chunk_embeddings(documents)
+
+    def search_chunks(self, query: str, limit: int = 10) -> list[dict]:
+        if self.chunk_embeddings is None or self.chunk_metadata is None:
+            raise ValueError(
+                "No chunk embeddings loaded. Call `load_or_create_chunk_embeddings` first."
+            )
+
+        query_embedding = self.generate_embedding(query)
+        chunk_scores: list[dict] = []
+
+        for i, chunk_embedding in enumerate(self.chunk_embeddings):
+            similarity = cosine_similarity(chunk_embedding, query_embedding)
+            metadata = self.chunk_metadata[i]
+            chunk_scores.append(
+                {
+                    "chunk_idx": metadata["chunk_idx"],
+                    "movie_idx": metadata["movie_idx"],
+                    "score": similarity,
+                }
+            )
+
+        movie_scores: dict[int, dict] = {}
+        for item in chunk_scores:
+            movie_idx = item["movie_idx"]
+            score = item["score"]
+            if movie_idx not in movie_scores or score > movie_scores[movie_idx]["score"]:
+                movie_scores[movie_idx] = item
+
+        ranked_movies = sorted(
+            movie_scores.items(), key=lambda pair: pair[1]["score"], reverse=True
+        )[:limit]
+
+        results = []
+        for movie_idx, best_item in ranked_movies:
+            movie = self.documents[movie_idx]
+            results.append(
+                {
+                    "id": movie["id"],
+                    "title": movie["title"],
+                    "document": movie["description"][:100],
+                    "score": round(best_item["score"], SCORE_PRECISION),
+                    "metadata": {"chunk_idx": best_item["chunk_idx"]},
+                }
+            )
+        return results
 
 
 def verify_model() -> None:
