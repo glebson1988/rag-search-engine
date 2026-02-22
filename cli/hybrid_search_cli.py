@@ -12,7 +12,20 @@ from openai import OpenAIError
 from lib.search_utils import load_movies
 
 
-def enhance_query_spell(query: str) -> str:
+def _clean_enhanced_query(text: str, fallback: str) -> str:
+    cleaned = (text or "").strip()
+    if not cleaned:
+        return fallback
+    # Remove common assistant prefixes and wrapping quotes.
+    prefixes = ("Corrected:", "Rewritten query:", "Rewritten:", "Query:")
+    for prefix in prefixes:
+        if cleaned.lower().startswith(prefix.lower()):
+            cleaned = cleaned[len(prefix) :].strip()
+    cleaned = cleaned.strip().strip('"').strip("'")
+    return cleaned or fallback
+
+
+def _enhance_query_with_groq(query: str, method: str) -> str:
     load_dotenv()
     api_key = os.environ.get("GROQ_API_KEY")
     if not api_key:
@@ -22,7 +35,8 @@ def enhance_query_spell(query: str) -> str:
         api_key=api_key,
         base_url="https://api.groq.com/openai/v1",
     )
-    prompt = f"""Fix any spelling errors in this movie search query.
+    if method == "spell":
+        prompt = f"""Fix any spelling errors in this movie search query.
 
 Only correct obvious typos. Don't change correctly spelled words.
 
@@ -30,13 +44,35 @@ Query: "{query}"
 
 If no errors, return the original query.
 Corrected:"""
+    elif method == "rewrite":
+        prompt = f"""Rewrite this movie search query to be more specific and searchable.
+
+Original: "{query}"
+
+Consider:
+- Common movie knowledge (famous actors, popular films)
+- Genre conventions (horror = scary, animation = cartoon)
+- Keep it concise (under 10 words)
+- It should be a google style search query that's very specific
+- Don't use boolean logic
+
+Examples:
+
+- "that bear movie where leo gets attacked" -> "The Revenant Leonardo DiCaprio bear attack"
+- "movie about bear in london with marmalade" -> "Paddington London marmalade"
+- "scary movie with bear from few years ago" -> "bear horror movie 2015-2020"
+
+Rewritten query:"""
+    else:
+        return query
+
     try:
         response = client.chat.completions.create(
             model="llama-3.1-8b-instant",
             messages=[{"role": "user", "content": prompt}],
         )
-        corrected = (response.choices[0].message.content or "").strip().strip('"')
-        return corrected or query
+        enhanced = response.choices[0].message.content or ""
+        return _clean_enhanced_query(enhanced, query)
     except OpenAIError:
         return query
 
@@ -65,7 +101,7 @@ def main() -> None:
     rrf_parser.add_argument(
         "--enhance",
         type=str,
-        choices=["spell"],
+        choices=["spell", "rewrite"],
         help="Query enhancement method",
     )
 
@@ -103,8 +139,8 @@ def main() -> None:
                 print(f"   {result['description'][:100]}...")
         case "rrf-search":
             search_query = args.query
-            if args.enhance == "spell":
-                enhanced_query = enhance_query_spell(args.query)
+            if args.enhance in ("spell", "rewrite"):
+                enhanced_query = _enhance_query_with_groq(args.query, args.enhance)
                 print(
                     f"Enhanced query ({args.enhance}): '{args.query}' -> '{enhanced_query}'\n"
                 )
