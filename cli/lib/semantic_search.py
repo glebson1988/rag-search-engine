@@ -1,6 +1,8 @@
 import os
 import json
 import re
+import io
+import contextlib
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -23,7 +25,9 @@ def cosine_similarity(vec1, vec2):
 
 class SemanticSearch:
     def __init__(self, model_name: str = "all-MiniLM-L6-v2") -> None:
-        self.model = SentenceTransformer(model_name)
+        # Suppress verbose model loading logs so CLI output remains test-friendly.
+        with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+            self.model = SentenceTransformer(model_name)
         self.embeddings = None
         self.documents = None
         self.document_map = {}
@@ -67,6 +71,7 @@ class SemanticSearch:
         top_matches = scored_documents[:limit]
         return [
             {
+                "id": document["id"],
                 "score": score,
                 "title": document["title"],
                 "description": document["description"],
