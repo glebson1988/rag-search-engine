@@ -3,9 +3,42 @@
 import argparse
 import contextlib
 import io
+import os
 
+from dotenv import load_dotenv
 from lib.hybrid_search import HybridSearch
+from openai import OpenAI
+from openai import OpenAIError
 from lib.search_utils import load_movies
+
+
+def enhance_query_spell(query: str) -> str:
+    load_dotenv()
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return query
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
+    prompt = f"""Fix any spelling errors in this movie search query.
+
+Only correct obvious typos. Don't change correctly spelled words.
+
+Query: "{query}"
+
+If no errors, return the original query.
+Corrected:"""
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        corrected = (response.choices[0].message.content or "").strip().strip('"')
+        return corrected or query
+    except OpenAIError:
+        return query
 
 
 def main() -> None:
@@ -28,6 +61,12 @@ def main() -> None:
     rrf_parser.add_argument("-k", type=int, default=60, help="RRF k parameter")
     rrf_parser.add_argument(
         "--limit", type=int, default=5, help="Maximum number of results"
+    )
+    rrf_parser.add_argument(
+        "--enhance",
+        type=str,
+        choices=["spell"],
+        help="Query enhancement method",
     )
 
     args = parser.parse_args()
@@ -63,12 +102,19 @@ def main() -> None:
                 print(f"   BM25: {result['bm25']:.3f}, Semantic: {result['semantic']:.3f}")
                 print(f"   {result['description'][:100]}...")
         case "rrf-search":
+            search_query = args.query
+            if args.enhance == "spell":
+                enhanced_query = enhance_query_spell(args.query)
+                print(
+                    f"Enhanced query ({args.enhance}): '{args.query}' -> '{enhanced_query}'\n"
+                )
+                search_query = enhanced_query
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
                 io.StringIO()
             ):
                 documents = load_movies()
                 hybrid = HybridSearch(documents)
-                results = hybrid.rrf_search(args.query, k=args.k, limit=args.limit)
+                results = hybrid.rrf_search(search_query, k=args.k, limit=args.limit)
             for i, result in enumerate(results, start=1):
                 bm25_rank = result["bm25_rank"] if result["bm25_rank"] is not None else "-"
                 semantic_rank = (
