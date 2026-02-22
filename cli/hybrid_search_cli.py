@@ -23,6 +23,12 @@ def main() -> None:
     weighted_parser.add_argument(
         "--limit", type=int, default=5, help="Maximum number of results"
     )
+    rrf_parser = subparsers.add_parser("rrf-search", help="Run RRF hybrid search")
+    rrf_parser.add_argument("query", type=str, help="Search query")
+    rrf_parser.add_argument("-k", type=int, default=60, help="RRF k parameter")
+    rrf_parser.add_argument(
+        "--limit", type=int, default=5, help="Maximum number of results"
+    )
 
     args = parser.parse_args()
 
@@ -55,6 +61,22 @@ def main() -> None:
                 print(f"{i}. {result['title']}")
                 print(f"   Hybrid Score: {result['hybrid']:.3f}")
                 print(f"   BM25: {result['bm25']:.3f}, Semantic: {result['semantic']:.3f}")
+                print(f"   {result['description'][:100]}...")
+        case "rrf-search":
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                documents = load_movies()
+                hybrid = HybridSearch(documents)
+                results = hybrid.rrf_search(args.query, k=args.k, limit=args.limit)
+            for i, result in enumerate(results, start=1):
+                bm25_rank = result["bm25_rank"] if result["bm25_rank"] is not None else "-"
+                semantic_rank = (
+                    result["semantic_rank"] if result["semantic_rank"] is not None else "-"
+                )
+                print(f"{i}. {result['title']}")
+                print(f"   RRF Score: {result['rrf']:.3f}")
+                print(f"   BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}")
                 print(f"   {result['description'][:100]}...")
         case _:
             parser.print_help()

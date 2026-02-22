@@ -18,6 +18,10 @@ def hybrid_score(bm25_score: float, semantic_score: float, alpha: float = 0.5) -
     return alpha * bm25_score + (1 - alpha) * semantic_score
 
 
+def rrf_score(rank: int, k: int = 60) -> float:
+    return 1 / (k + rank)
+
+
 class HybridSearch:
     def __init__(self, documents):
         self.documents = documents
@@ -98,4 +102,51 @@ class HybridSearch:
         return results[:limit]
 
     def rrf_search(self, query, k, limit=10):
-        raise NotImplementedError("RRF hybrid search is not implemented yet.")
+        expanded_limit = max(1, limit * 500)
+
+        bm25_results = self._bm25_search(query, expanded_limit)
+        semantic_results = self.semantic_search.search_chunks(query, expanded_limit)
+
+        ranked_docs: dict[int, dict] = {}
+
+        for rank, (doc_id, _) in enumerate(bm25_results, start=1):
+            document = self.idx.docmap.get(doc_id)
+            if document is None:
+                continue
+            entry = ranked_docs.setdefault(
+                doc_id,
+                {
+                    "id": doc_id,
+                    "title": document["title"],
+                    "description": document["description"],
+                    "bm25_rank": None,
+                    "semantic_rank": None,
+                    "rrf": 0.0,
+                },
+            )
+            if entry["bm25_rank"] is None:
+                entry["bm25_rank"] = rank
+                entry["rrf"] += rrf_score(rank, k=k)
+
+        for rank, result in enumerate(semantic_results, start=1):
+            doc_id = result["id"]
+            document = self.idx.docmap.get(doc_id)
+            if document is None:
+                continue
+            entry = ranked_docs.setdefault(
+                doc_id,
+                {
+                    "id": doc_id,
+                    "title": document["title"],
+                    "description": document["description"],
+                    "bm25_rank": None,
+                    "semantic_rank": None,
+                    "rrf": 0.0,
+                },
+            )
+            if entry["semantic_rank"] is None:
+                entry["semantic_rank"] = rank
+                entry["rrf"] += rrf_score(rank, k=k)
+
+        results = sorted(ranked_docs.values(), key=lambda item: item["rrf"], reverse=True)
+        return results[:limit]
