@@ -4,6 +4,8 @@ import argparse
 import contextlib
 import io
 import os
+import re
+import time
 
 from dotenv import load_dotenv
 from lib.hybrid_search import HybridSearch
@@ -92,6 +94,65 @@ Query: "{query}"
         return query
 
 
+def _extract_score_0_10(text: str) -> float:
+    match = re.search(r"(-?\d+(?:\.\d+)?)", text or "")
+    if not match:
+        return 0.0
+    value = float(match.group(1))
+    return max(0.0, min(10.0, value))
+
+
+def rerank_individual_with_groq(query: str, docs: list[dict], sleep_seconds: int = 3) -> list[dict]:
+    load_dotenv()
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        for doc in docs:
+            doc["rerank_score"] = 0.0
+        return docs
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
+
+    reranked = []
+    for i, doc in enumerate(docs):
+        document_text = doc.get("document", doc.get("description", ""))
+        prompt = f"""Rate how well this movie matches the search query.
+
+Query: "{query}"
+Movie: {doc.get("title", "")} - {document_text}
+
+Consider:
+- Direct relevance to query
+- User intent (what they're looking for)
+- Content appropriateness
+
+Rate 0-10 (10 = perfect match).
+Give me ONLY the number in your response, no other text or explanation.
+
+Score:"""
+        try:
+            response = client.chat.completions.create(
+                model="llama-3.1-8b-instant",
+                messages=[{"role": "user", "content": prompt}],
+            )
+            raw_text = response.choices[0].message.content or ""
+            score = _extract_score_0_10(raw_text)
+        except OpenAIError:
+            score = 0.0
+
+        enriched = dict(doc)
+        enriched["rerank_score"] = score
+        reranked.append(enriched)
+
+        if i < len(docs) - 1:
+            time.sleep(sleep_seconds)
+
+    reranked.sort(key=lambda item: (item["rerank_score"], item["rrf"]), reverse=True)
+    return reranked
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -118,6 +179,12 @@ def main() -> None:
         type=str,
         choices=["spell", "rewrite", "expand"],
         help="Query enhancement method",
+    )
+    rrf_parser.add_argument(
+        "--rerank-method",
+        type=str,
+        choices=["individual"],
+        help="LLM reranking method",
     )
 
     args = parser.parse_args()
@@ -160,21 +227,32 @@ def main() -> None:
                     f"Enhanced query ({args.enhance}): '{args.query}' -> '{enhanced_query}'\n"
                 )
                 search_query = enhanced_query
+            rrf_limit = args.limit * 5 if args.rerank_method == "individual" else args.limit
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
                 io.StringIO()
             ):
                 documents = load_movies()
                 hybrid = HybridSearch(documents)
-                results = hybrid.rrf_search(search_query, k=args.k, limit=args.limit)
-            for i, result in enumerate(results, start=1):
+                results = hybrid.rrf_search(search_query, k=args.k, limit=rrf_limit)
+
+            if args.rerank_method == "individual":
+                print(f"Reranking top {args.limit} results using individual method...")
+                results = rerank_individual_with_groq(search_query, results)
+
+            print(f"Reciprocal Rank Fusion Results for '{search_query}' (k={args.k}):\n")
+            final_results = results[: args.limit]
+            for i, result in enumerate(final_results, start=1):
                 bm25_rank = result["bm25_rank"] if result["bm25_rank"] is not None else "-"
                 semantic_rank = (
                     result["semantic_rank"] if result["semantic_rank"] is not None else "-"
                 )
                 print(f"{i}. {result['title']}")
+                if args.rerank_method == "individual":
+                    print(f"   Rerank Score: {result.get('rerank_score', 0.0):.3f}/10")
                 print(f"   RRF Score: {result['rrf']:.3f}")
                 print(f"   BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}")
-                print(f"   {result['description'][:100]}...")
+                document_text = result.get("document", result.get("description", ""))
+                print(f"   {document_text[:100]}...")
         case _:
             parser.print_help()
 
