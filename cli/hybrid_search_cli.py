@@ -16,6 +16,14 @@ from lib.search_utils import load_movies
 from sentence_transformers import CrossEncoder
 
 
+def _debug_top_titles(results: list[dict], limit: int = 5) -> str:
+    if not results:
+        return "(no results)"
+    top = results[:limit]
+    parts = [f"{doc.get('id', '-')}: {doc.get('title', '')}" for doc in top]
+    return "; ".join(parts)
+
+
 def _clean_enhanced_query(text: str, fallback: str) -> str:
     cleaned = (text or "").strip()
     if not cleaned:
@@ -305,6 +313,7 @@ def main() -> None:
                 print(f"   BM25: {result['bm25']:.3f}, Semantic: {result['semantic']:.3f}")
                 print(f"   {result['description'][:100]}...")
         case "rrf-search":
+            print(f"[DEBUG] Original query: '{args.query}'")
             search_query = args.query
             if args.enhance in ("spell", "rewrite", "expand"):
                 enhanced_query = _enhance_query_with_groq(args.query, args.enhance)
@@ -312,6 +321,9 @@ def main() -> None:
                     f"Enhanced query ({args.enhance}): '{args.query}' -> '{enhanced_query}'\n"
                 )
                 search_query = enhanced_query
+                print(f"[DEBUG] Enhanced query ({args.enhance}): '{search_query}'")
+            else:
+                print("[DEBUG] Enhanced query: (not applied)")
             rrf_limit = (
                 args.limit * 5
                 if args.rerank_method in ("individual", "batch", "cross_encoder")
@@ -323,6 +335,9 @@ def main() -> None:
                 documents = load_movies()
                 hybrid = HybridSearch(documents)
                 results = hybrid.rrf_search(search_query, k=args.k, limit=rrf_limit)
+            print(
+                f"[DEBUG] RRF results count: {len(results)} | top: {_debug_top_titles(results)}"
+            )
 
             if args.rerank_method == "individual":
                 print(f"Reranking top {args.limit} results using individual method...")
@@ -336,6 +351,9 @@ def main() -> None:
 
             print(f"Reciprocal Rank Fusion Results for '{search_query}' (k={args.k}):\n")
             final_results = results[: args.limit]
+            print(
+                f"[DEBUG] Final results count: {len(final_results)} | top: {_debug_top_titles(final_results)}"
+            )
             for i, result in enumerate(final_results, start=1):
                 bm25_rank = result["bm25_rank"] if result["bm25_rank"] is not None else "-"
                 semantic_rank = (
