@@ -3,6 +3,7 @@
 import argparse
 import contextlib
 import io
+import json
 import os
 import re
 import time
@@ -153,6 +154,68 @@ Score:"""
     return reranked
 
 
+def rerank_batch_with_groq(query: str, docs: list[dict]) -> list[dict]:
+    load_dotenv()
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        reranked = []
+        for i, doc in enumerate(docs, start=1):
+            enriched = dict(doc)
+            enriched["rerank_rank"] = i
+            reranked.append(enriched)
+        return reranked
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
+    doc_list_str = "\n".join(
+        f"- id={doc.get('id')} | title={doc.get('title', '')} | document={doc.get('document', doc.get('description', ''))}"
+        for doc in docs
+    )
+    prompt = f"""Rank these movies by relevance to the search query.
+
+Query: "{query}"
+
+Movies:
+{doc_list_str}
+
+Return ONLY the IDs in order of relevance (best match first). Return a valid JSON list, nothing else. For example:
+
+[75, 12, 34, 2, 1]
+"""
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = (response.choices[0].message.content or "").strip()
+        try:
+            ranked_ids = json.loads(raw)
+        except json.JSONDecodeError:
+            match = re.search(r"\[[\s\S]*\]", raw)
+            ranked_ids = json.loads(match.group(0)) if match else []
+    except OpenAIError:
+        ranked_ids = []
+
+    rank_map: dict[int, int] = {}
+    for idx, doc_id in enumerate(ranked_ids, start=1):
+        try:
+            rank_map[int(doc_id)] = idx
+        except (TypeError, ValueError):
+            continue
+
+    reranked = []
+    fallback_rank = len(docs) + 1
+    for i, doc in enumerate(docs, start=1):
+        enriched = dict(doc)
+        enriched["rerank_rank"] = rank_map.get(doc["id"], fallback_rank + i)
+        reranked.append(enriched)
+
+    reranked.sort(key=lambda item: item["rerank_rank"])
+    return reranked
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -183,7 +246,7 @@ def main() -> None:
     rrf_parser.add_argument(
         "--rerank-method",
         type=str,
-        choices=["individual"],
+        choices=["individual", "batch"],
         help="LLM reranking method",
     )
 
@@ -227,7 +290,7 @@ def main() -> None:
                     f"Enhanced query ({args.enhance}): '{args.query}' -> '{enhanced_query}'\n"
                 )
                 search_query = enhanced_query
-            rrf_limit = args.limit * 5 if args.rerank_method == "individual" else args.limit
+            rrf_limit = args.limit * 5 if args.rerank_method in ("individual", "batch") else args.limit
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
                 io.StringIO()
             ):
@@ -238,6 +301,9 @@ def main() -> None:
             if args.rerank_method == "individual":
                 print(f"Reranking top {args.limit} results using individual method...")
                 results = rerank_individual_with_groq(search_query, results)
+            elif args.rerank_method == "batch":
+                print(f"Reranking top {args.limit} results using batch method...")
+                results = rerank_batch_with_groq(search_query, results)
 
             print(f"Reciprocal Rank Fusion Results for '{search_query}' (k={args.k}):\n")
             final_results = results[: args.limit]
@@ -249,6 +315,8 @@ def main() -> None:
                 print(f"{i}. {result['title']}")
                 if args.rerank_method == "individual":
                     print(f"   Rerank Score: {result.get('rerank_score', 0.0):.3f}/10")
+                if args.rerank_method == "batch":
+                    print(f"   Rerank Rank: {result.get('rerank_rank', '-')}")
                 print(f"   RRF Score: {result['rrf']:.3f}")
                 print(f"   BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}")
                 document_text = result.get("document", result.get("description", ""))
