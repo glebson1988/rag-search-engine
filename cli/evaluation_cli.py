@@ -41,10 +41,17 @@ def main():
         relevant_retrieved = sum(1 for title in retrieved_titles if title in relevant_set)
         precision_at_k = relevant_retrieved / len(retrieved_titles) if retrieved_titles else 0.0
         recall_at_k = relevant_retrieved / len(relevant_titles) if relevant_titles else 0.0
+        if precision_at_k + recall_at_k == 0:
+            f1_score = 0.0
+        else:
+            f1_score = (
+                2 * (precision_at_k * recall_at_k) / (precision_at_k + recall_at_k)
+            )
 
         print(f"- Query: {query}")
         print(f"  - Precision@{limit}: {precision_at_k:.4f}")
         print(f"  - Recall@{limit}: {recall_at_k:.4f}")
+        print(f"  - F1 Score: {f1_score:.4f}")
         print(f"  - Retrieved: {', '.join(retrieved_titles)}")
         print(f"  - Relevant: {', '.join(relevant_titles)}\n")
 
