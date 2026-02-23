@@ -246,6 +246,73 @@ def rerank_cross_encoder(query: str, docs: list[dict]) -> list[dict]:
     return reranked
 
 
+def evaluate_results_with_groq(query: str, results: list[dict]) -> list[int]:
+    if not results:
+        return []
+
+    load_dotenv()
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return [0 for _ in results]
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
+
+    formatted_results = []
+    for i, doc in enumerate(results, start=1):
+        title = doc.get("title", "")
+        document_text = doc.get("document", doc.get("description", ""))
+        formatted_results.append(f"{i}. {title} - {document_text[:200]}")
+
+    prompt = f"""Rate how relevant each result is to this query on a 0-3 scale:
+
+Query: "{query}"
+
+Results:
+{chr(10).join(formatted_results)}
+
+Scale:
+- 3: Highly relevant
+- 2: Relevant
+- 1: Marginally relevant
+- 0: Not relevant
+
+Do NOT give any numbers out than 0, 1, 2, or 3.
+
+Return ONLY the scores in the same order you were given the documents. Return a valid JSON list, nothing else. For example:
+
+[2, 0, 3, 2, 0, 1]"""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        raw = (response.choices[0].message.content or "").strip()
+        try:
+            parsed = json.loads(raw)
+        except json.JSONDecodeError:
+            match = re.search(r"\[[\s\S]*\]", raw)
+            parsed = json.loads(match.group(0)) if match else []
+    except OpenAIError:
+        parsed = []
+
+    scores: list[int] = []
+    for value in parsed:
+        try:
+            score = int(value)
+        except (TypeError, ValueError):
+            score = 0
+        scores.append(max(0, min(3, score)))
+
+    if len(scores) < len(results):
+        scores.extend([0] * (len(results) - len(scores)))
+
+    return scores[: len(results)]
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -278,6 +345,11 @@ def main() -> None:
         type=str,
         choices=["individual", "batch", "cross_encoder"],
         help="LLM reranking method",
+    )
+    rrf_parser.add_argument(
+        "--evaluate",
+        action="store_true",
+        help="Evaluate final search results using an LLM judge",
     )
 
     args = parser.parse_args()
@@ -370,6 +442,11 @@ def main() -> None:
                 print(f"   BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}")
                 document_text = result.get("document", result.get("description", ""))
                 print(f"   {document_text[:100]}...")
+
+            if args.evaluate:
+                eval_scores = evaluate_results_with_groq(search_query, final_results)
+                for i, (result, score) in enumerate(zip(final_results, eval_scores), start=1):
+                    print(f"{i}. {result.get('title', '')}: {score}/3")
         case _:
             parser.print_help()
 
