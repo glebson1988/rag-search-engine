@@ -13,6 +13,7 @@ from lib.hybrid_search import HybridSearch
 from openai import OpenAI
 from openai import OpenAIError
 from lib.search_utils import load_movies
+from sentence_transformers import CrossEncoder
 
 
 def _clean_enhanced_query(text: str, fallback: str) -> str:
@@ -216,6 +217,27 @@ Return ONLY the IDs in order of relevance (best match first). Return a valid JSO
     return reranked
 
 
+def rerank_cross_encoder(query: str, docs: list[dict]) -> list[dict]:
+    pairs = []
+    for doc in docs:
+        document_text = doc.get("document", doc.get("description", ""))
+        pairs.append([query, f"{doc.get('title', '')} - {document_text}"])
+
+    # Suppress model loading logs so rerank output remains readable.
+    with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(io.StringIO()):
+        cross_encoder = CrossEncoder("cross-encoder/ms-marco-TinyBERT-L2-v2")
+        scores = cross_encoder.predict(pairs)
+
+    reranked = []
+    for doc, score in zip(docs, scores):
+        enriched = dict(doc)
+        enriched["cross_encoder_score"] = float(score)
+        reranked.append(enriched)
+
+    reranked.sort(key=lambda item: item["cross_encoder_score"], reverse=True)
+    return reranked
+
+
 def main() -> None:
     parser = argparse.ArgumentParser(description="Hybrid Search CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -246,7 +268,7 @@ def main() -> None:
     rrf_parser.add_argument(
         "--rerank-method",
         type=str,
-        choices=["individual", "batch"],
+        choices=["individual", "batch", "cross_encoder"],
         help="LLM reranking method",
     )
 
@@ -290,7 +312,11 @@ def main() -> None:
                     f"Enhanced query ({args.enhance}): '{args.query}' -> '{enhanced_query}'\n"
                 )
                 search_query = enhanced_query
-            rrf_limit = args.limit * 5 if args.rerank_method in ("individual", "batch") else args.limit
+            rrf_limit = (
+                args.limit * 5
+                if args.rerank_method in ("individual", "batch", "cross_encoder")
+                else args.limit
+            )
             with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
                 io.StringIO()
             ):
@@ -304,6 +330,9 @@ def main() -> None:
             elif args.rerank_method == "batch":
                 print(f"Reranking top {args.limit} results using batch method...")
                 results = rerank_batch_with_groq(search_query, results)
+            elif args.rerank_method == "cross_encoder":
+                print(f"Reranking top {rrf_limit} results using cross_encoder method...\n")
+                results = rerank_cross_encoder(search_query, results)
 
             print(f"Reciprocal Rank Fusion Results for '{search_query}' (k={args.k}):\n")
             final_results = results[: args.limit]
@@ -317,6 +346,8 @@ def main() -> None:
                     print(f"   Rerank Score: {result.get('rerank_score', 0.0):.3f}/10")
                 if args.rerank_method == "batch":
                     print(f"   Rerank Rank: {result.get('rerank_rank', '-')}")
+                if args.rerank_method == "cross_encoder":
+                    print(f"   Cross Encoder Score: {result.get('cross_encoder_score', 0.0):.3f}")
                 print(f"   RRF Score: {result['rrf']:.3f}")
                 print(f"   BM25 Rank: {bm25_rank}, Semantic Rank: {semantic_rank}")
                 document_text = result.get("document", result.get("description", ""))
