@@ -105,6 +105,47 @@ Provide a comprehensive 3–4 sentence answer that combines information from mul
         return f"Summary generation failed: {exc}"
 
 
+def _generate_citations_answer(query: str, documents: str) -> str:
+    load_dotenv()
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return "GROQ_API_KEY is not set."
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
+
+    prompt = f"""Answer the question or provide information based on the provided documents.
+
+This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+
+If not enough information is available to give a good answer, say so but give as good of an answer as you can while citing the sources you have.
+
+Query: {query}
+
+Documents:
+{documents}
+
+Instructions:
+- Provide a comprehensive answer that addresses the query
+- Cite sources using [1], [2], etc. format when referencing information
+- If sources disagree, mention the different viewpoints
+- If the answer isn't in the documents, say "I don't have enough information"
+- Be direct and informative
+
+Answer:"""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return (response.choices[0].message.content or "").strip()
+    except OpenAIError as exc:
+        return f"Citations answer generation failed: {exc}"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Retrieval Augmented Generation CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -118,6 +159,13 @@ def main():
     )
     summarize_parser.add_argument("query", type=str, help="Search query to summarize")
     summarize_parser.add_argument(
+        "--limit", type=int, default=5, help="Maximum number of search results"
+    )
+    citations_parser = subparsers.add_parser(
+        "citations", help="Answer with citations based on retrieved documents"
+    )
+    citations_parser.add_argument("query", type=str, help="Search query to answer")
+    citations_parser.add_argument(
         "--limit", type=int, default=5, help="Maximum number of search results"
     )
 
@@ -161,6 +209,25 @@ def main():
 
             print("\nLLM Summary:")
             print(summary)
+        case "citations":
+            query = args.query
+            limit = args.limit
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                documents = load_movies()
+                hybrid = HybridSearch(documents)
+                results = hybrid.rrf_search(query, k=60, limit=limit)
+
+            docs = _build_docs_block(results, max_chars_per_doc=220)
+            answer = _generate_citations_answer(query, docs)
+
+            print("Search Results:")
+            for result in results:
+                print(f"  - {result.get('title', '')}")
+
+            print("\nLLM Answer:")
+            print(answer)
         case _:
             parser.print_help()
 
