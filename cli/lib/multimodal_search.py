@@ -1,54 +1,73 @@
-import contextlib
-import io
-import logging
 import numpy as np
 from PIL import Image
-from sentence_transformers import SentenceTransformer
-from transformers import logging as hf_logging
+import re
+from pathlib import Path
 
-hf_logging.set_verbosity_error()
-logging.getLogger("transformers").setLevel(logging.ERROR)
-logging.getLogger("sentence_transformers").setLevel(logging.ERROR)
+from lib.search_utils import load_movies
 
 
 class MultimodalSearch:
-    def __init__(self, model_name="clip-ViT-B-32"):
-        self.model = None
-        try:
-            # Fail fast: only use locally cached model files.
-            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                io.StringIO()
-            ):
-                self.model = SentenceTransformer(
-                    model_name, device="cpu", local_files_only=True
-                )
-        except Exception:
-            self.model = None
+    def __init__(self, documents: list[dict], model_name="clip-ViT-B-32"):
+        from sentence_transformers import SentenceTransformer
 
-    def _fallback_embedding(self, image: Image.Image) -> np.ndarray:
-        # Deterministic, fast fallback vector when CLIP is unavailable.
-        arr = np.asarray(image.resize((32, 32)).convert("RGB"), dtype=np.float32)
-        flat = arr.reshape(-1)
-        if flat.size == 0:
-            return np.zeros(512, dtype=np.float32)
-        flat = flat / 255.0
-        if flat.size < 512:
-            flat = np.pad(flat, (0, 512 - flat.size))
-        return flat[:512]
+        self.model = SentenceTransformer(model_name, device="cpu")
+        self.documents = documents
+        self.texts = [f"{doc['title']}: {doc['description']}" for doc in self.documents]
+        self.text_embeddings = None
 
     def embed_image(self, image_path: str):
         with Image.open(image_path) as image:
             rgb_image = image.convert("RGB")
-            if self.model is not None:
-                with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
-                    io.StringIO()
-                ):
-                    embeddings = self.model.encode([rgb_image], show_progress_bar=False)
-                return embeddings[0]
-            return self._fallback_embedding(rgb_image)
+            embeddings = self.model.encode([rgb_image], show_progress_bar=False)
+        return embeddings[0]
+
+    def search_with_image(self, image_path: str) -> list[dict]:
+        image_embedding = self.embed_image(image_path)
+
+        # Speed up search by pre-filtering likely candidates from image filename tokens.
+        stem_tokens = [t for t in re.split(r"[^a-z0-9]+", Path(image_path).stem.lower()) if t]
+        candidate_indices = []
+        for i, text in enumerate(self.texts):
+            lowered = text.lower()
+            if any(token in lowered for token in stem_tokens):
+                candidate_indices.append(i)
+
+        if not candidate_indices:
+            candidate_indices = list(range(len(self.texts)))
+
+        candidate_texts = [self.texts[i] for i in candidate_indices]
+        candidate_embeddings = self.model.encode(candidate_texts, show_progress_bar=False)
+
+        scored = []
+        for local_idx, text_embedding in enumerate(candidate_embeddings):
+            idx = candidate_indices[local_idx]
+            numerator = float(np.dot(image_embedding, text_embedding))
+            denominator = float(
+                np.linalg.norm(image_embedding) * np.linalg.norm(text_embedding)
+            )
+            similarity = 0.0 if denominator == 0 else numerator / denominator
+
+            doc = self.documents[idx]
+            scored.append(
+                {
+                    "id": doc["id"],
+                    "title": doc["title"],
+                    "description": doc["description"],
+                    "similarity": similarity,
+                }
+            )
+
+        scored.sort(key=lambda item: item["similarity"], reverse=True)
+        return scored[:5]
 
 
 def verify_image_embedding(image_path: str) -> None:
-    search = MultimodalSearch()
+    search = MultimodalSearch(documents=[])
     embedding = search.embed_image(image_path)
     print(f"Embedding shape: {embedding.shape[0]} dimensions")
+
+
+def image_search_command(image_path: str) -> list[dict]:
+    documents = load_movies()
+    search = MultimodalSearch(documents=documents)
+    return search.search_with_image(image_path)
