@@ -146,6 +146,48 @@ Answer:"""
         return f"Citations answer generation failed: {exc}"
 
 
+def _generate_question_answer(question: str, context: str) -> str:
+    load_dotenv()
+    api_key = os.environ.get("GROQ_API_KEY")
+    if not api_key:
+        return "GROQ_API_KEY is not set."
+
+    client = OpenAI(
+        api_key=api_key,
+        base_url="https://api.groq.com/openai/v1",
+    )
+
+    prompt = f"""Answer the user's question based on the provided movies that are available on Hoopla.
+
+This should be tailored to Hoopla users. Hoopla is a movie streaming service.
+
+Question: {question}
+
+Documents:
+{context}
+
+Instructions:
+- Answer questions directly and concisely
+- Be casual and conversational
+- Don't be cringe or hype-y
+- Talk like a normal person would in a chat conversation
+- Prioritize concrete facts from the most relevant document(s)
+- If the answer exists in the documents, list exact names/details from the text
+- Do not hedge if the documents clearly contain the answer
+- If the answer is missing, say "I don't have enough information"
+
+Answer:"""
+
+    try:
+        response = client.chat.completions.create(
+            model="llama-3.1-8b-instant",
+            messages=[{"role": "user", "content": prompt}],
+        )
+        return (response.choices[0].message.content or "").strip()
+    except OpenAIError as exc:
+        return f"Question answering failed: {exc}"
+
+
 def main():
     parser = argparse.ArgumentParser(description="Retrieval Augmented Generation CLI")
     subparsers = parser.add_subparsers(dest="command", help="Available commands")
@@ -166,6 +208,13 @@ def main():
     )
     citations_parser.add_argument("query", type=str, help="Search query to answer")
     citations_parser.add_argument(
+        "--limit", type=int, default=5, help="Maximum number of search results"
+    )
+    question_parser = subparsers.add_parser(
+        "question", help="Answer a question using retrieved documents"
+    )
+    question_parser.add_argument("question", type=str, help="Question to answer")
+    question_parser.add_argument(
         "--limit", type=int, default=5, help="Maximum number of search results"
     )
 
@@ -227,6 +276,26 @@ def main():
                 print(f"  - {result.get('title', '')}")
 
             print("\nLLM Answer:")
+            print(answer)
+        case "question":
+            question = args.question
+            limit = args.limit
+            with contextlib.redirect_stdout(io.StringIO()), contextlib.redirect_stderr(
+                io.StringIO()
+            ):
+                documents = load_movies()
+                hybrid = HybridSearch(documents)
+                results = hybrid.rrf_search(question, k=60, limit=limit)
+
+            # Use more context for QA so named entities are preserved.
+            docs = _build_docs_block(results, max_chars_per_doc=600)
+            answer = _generate_question_answer(question, docs)
+
+            print("Search Results:")
+            for result in results:
+                print(f"  - {result.get('title', '')}")
+
+            print("\nAnswer:")
             print(answer)
         case _:
             parser.print_help()
