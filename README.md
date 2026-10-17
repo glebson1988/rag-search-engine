@@ -43,13 +43,16 @@ Movie search project with keyword, semantic, hybrid, RAG, and multimodal retriev
   - Purpose: embed images and text in a shared space for image-based movie search
   - Used in: `cli/lib/multimodal_search.py`
 
-- `llama-3.1-8b-instant` (via Groq)
+- `openai/gpt-oss-20b` (via Groq; text-model default)
   - Purpose: query enhancement, LLM reranking, LLM evaluation, RAG generation
   - Used in: `cli/hybrid_search_cli.py`, `cli/augmented_generation_cli.py`
+  - Override using `GROQ_MODEL` in the environment or `.env`.
+  - The original project used `llama-3.1-8b-instant`. Groq retired that model for free/developer usage on August 16, 2026; the replacement follows [Groq's migration guidance](https://console.groq.com/docs/deprecations).
 
-- `meta-llama/llama-4-scout-17b-16e-instruct` (via Groq)
+- `meta-llama/llama-4-scout-17b-16e-instruct` (legacy remote vision workflow)
   - Purpose: multimodal query rewriting from image + text
   - Used in: `cli/describe_image_cli.py`
+  - Deprecated for Groq free/developer usage; this command has not been migrated or verified against a replacement. Local CLIP image search is a separate workflow.
 
 ## CLI Entrypoints
 
@@ -83,4 +86,15 @@ Optional `.env` for LLM features:
 
 ```env
 GROQ_API_KEY="your_key"
+GROQ_MODEL=openai/gpt-oss-20b
 ```
+
+## Groq model configuration
+
+```dotenv
+GROQ_MODEL=openai/gpt-oss-20b
+```
+
+An October 17, 2026 smoke test of `openai/gpt-oss-20b` returned HTTP 200 in 1.478 seconds and identified Paddington. The original text model had returned HTTP 404 (`model_not_found`). The successful response also included platform claims unsupported by the supplied descriptions, so API availability and grounded answer quality should be assessed separately.
+
+The separate image-query rewriting command still names the original Scout model, which Groq also retired for free/developer usage. That remote vision workflow has not been migrated or tested. Local CLIP image search is separate and passes the local smoke check.

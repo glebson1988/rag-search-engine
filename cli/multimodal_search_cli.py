@@ -2,8 +2,7 @@
 
 import argparse
 
-from lib.multimodal_search import image_search_command
-from lib.multimodal_search import verify_image_embedding
+from lib.multimodal_search import image_search_command, verify_image_embedding
 
 
 def main() -> None:

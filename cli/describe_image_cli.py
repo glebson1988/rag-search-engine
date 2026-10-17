@@ -6,8 +6,7 @@ import mimetypes
 import os
 
 from dotenv import load_dotenv
-from openai import OpenAI
-from openai import OpenAIError
+from openai import OpenAI, OpenAIError
 
 
 def main() -> None:

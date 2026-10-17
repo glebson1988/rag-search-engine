@@ -1,8 +1,7 @@
 import os
 
 from dotenv import load_dotenv
-from openai import OpenAI
-from openai import OpenAIError
+from openai import OpenAI, OpenAIError
 
 load_dotenv()
 api_key = os.environ.get("GROQ_API_KEY")
@@ -10,7 +9,7 @@ api_key = os.environ.get("GROQ_API_KEY")
 if not api_key:
     raise ValueError("GROQ_API_KEY is not set")
 
-print(f"Using key {api_key[:6]}...")
+print("Groq API key configured.")
 
 client = OpenAI(
     api_key=api_key,
@@ -19,7 +18,7 @@ client = OpenAI(
 
 try:
     response = client.chat.completions.create(
-        model="llama-3.1-8b-instant",
+        model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
         messages=[
             {
                 "role": "user",
@@ -32,8 +31,9 @@ try:
     )
     text = response.choices[0].message.content or ""
     print(text)
-    print(f"Prompt Tokens: {response.usage.prompt_tokens}")
-    print(f"Response Tokens: {response.usage.completion_tokens}")
+    usage = response.usage
+    print(f"Prompt Tokens: {usage.prompt_tokens if usage else 0}")
+    print(f"Response Tokens: {usage.completion_tokens if usage else 0}")
 except OpenAIError as exc:
     print(f"API request failed: {exc}")
     print("Prompt Tokens: 0")

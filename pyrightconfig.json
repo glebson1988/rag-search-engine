@@ -1,0 +1,16 @@
+{
+  "include": [
+    "cli"
+  ],
+  "venvPath": ".",
+  "venv": ".venv",
+  "typeCheckingMode": "basic",
+  "executionEnvironments": [
+    {
+      "root": ".",
+      "extraPaths": [
+        "cli"
+      ]
+    }
+  ]
+}

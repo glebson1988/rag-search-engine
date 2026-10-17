@@ -2,14 +2,16 @@
 
 import argparse
 
-from lib.semantic_search import ChunkedSemanticSearch
-from lib.semantic_search import embed_text
-from lib.semantic_search import embed_query_text
-from lib.semantic_search import semantic_chunk_text
-from lib.semantic_search import SemanticSearch
-from lib.semantic_search import verify_embeddings
-from lib.semantic_search import verify_model
 from lib.search_utils import load_movies
+from lib.semantic_search import (
+    ChunkedSemanticSearch,
+    SemanticSearch,
+    embed_query_text,
+    embed_text,
+    semantic_chunk_text,
+    verify_embeddings,
+    verify_model,
+)
 
 
 def main():

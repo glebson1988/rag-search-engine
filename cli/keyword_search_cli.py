@@ -4,11 +4,9 @@ import argparse
 import math
 
 from lib.constants import BM25_K1
-from lib.keyword_search import InvertedIndex
-from lib.keyword_search import bm25_idf_command
-from lib.keyword_search import bm25_tf_command
-from lib.search_utils import BM25_B
-from lib.search_utils import tokenize_text
+from lib.keyword_search import InvertedIndex, bm25_idf_command, bm25_tf_command
+from lib.search_utils import BM25_B, tokenize_text
+
 
 def main() -> None:
     parser = argparse.ArgumentParser(description="Keyword Search CLI")
@@ -149,8 +147,8 @@ def main() -> None:
             except FileNotFoundError:
                 print("Error: index not found. Run `build` first.")
                 return
-            results = index.bm25_search(args.query, args.limit)
-            for rank, (doc_id, score) in enumerate(results, start=1):
+            bm25_results = index.bm25_search(args.query, args.limit)
+            for rank, (doc_id, score) in enumerate(bm25_results, start=1):
                 movie = index.docmap.get(doc_id, {})
                 title = movie.get("title", "<missing title>")
                 print(f"{rank}. ({doc_id}) {title} - Score: {score:.2f}")

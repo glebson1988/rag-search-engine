@@ -8,8 +8,7 @@ import os
 from dotenv import load_dotenv
 from lib.hybrid_search import HybridSearch
 from lib.search_utils import load_movies
-from openai import OpenAI
-from openai import OpenAIError
+from openai import OpenAI, OpenAIError
 
 
 def _build_docs_block(results: list[dict], max_chars_per_doc: int = 220) -> str:
@@ -47,7 +46,7 @@ Provide a comprehensive answer that addresses the query:"""
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "user", "content": prompt}],
         )
         return (response.choices[0].message.content or "").strip()
@@ -64,7 +63,7 @@ Titles:
 Keep the answer concise and grounded in the provided titles."""
             try:
                 response = client.chat.completions.create(
-                    model="llama-3.1-8b-instant",
+                    model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
                     messages=[{"role": "user", "content": compact_prompt}],
                 )
                 return (response.choices[0].message.content or "").strip()
@@ -97,7 +96,7 @@ Provide a comprehensive 3–4 sentence answer that combines information from mul
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "user", "content": prompt}],
         )
         return (response.choices[0].message.content or "").strip()
@@ -138,7 +137,7 @@ Answer:"""
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "user", "content": prompt}],
         )
         return (response.choices[0].message.content or "").strip()
@@ -180,7 +179,7 @@ Answer:"""
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "user", "content": prompt}],
         )
         return (response.choices[0].message.content or "").strip()

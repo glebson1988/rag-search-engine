@@ -1,9 +1,9 @@
-import numpy as np
-from PIL import Image
 import re
 from pathlib import Path
 
+import numpy as np
 from lib.search_utils import load_movies
+from PIL import Image
 
 
 class MultimodalSearch:
@@ -18,7 +18,8 @@ class MultimodalSearch:
     def embed_image(self, image_path: str):
         with Image.open(image_path) as image:
             rgb_image = image.convert("RGB")
-            embeddings = self.model.encode([rgb_image], show_progress_bar=False)
+            # CLIP accepts PIL images; SentenceTransformer's overloads describe text inputs.
+            embeddings = self.model.encode([rgb_image], show_progress_bar=False)  # pyright: ignore[reportCallIssue, reportArgumentType]
         return embeddings[0]
 
     def search_with_image(self, image_path: str) -> list[dict]:

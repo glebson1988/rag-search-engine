@@ -1,8 +1,8 @@
-import os
-import json
-import re
-import io
 import contextlib
+import io
+import json
+import os
+import re
 
 import numpy as np
 from sentence_transformers import SentenceTransformer
@@ -33,11 +33,11 @@ class SemanticSearch:
         self.document_map = {}
         self.embeddings_path = os.path.join(CACHE_DIR, "movie_embeddings.npy")
 
-    def generate_embedding(self, text: str):
+    def generate_embedding(self, text: str) -> np.ndarray:
         if not text or not text.strip():
             raise ValueError("text must not be empty")
         cleaned_text = text.strip()
-        return self.model.encode(cleaned_text)
+        return self.model.encode(cleaned_text, convert_to_numpy=True)
 
     def build_embeddings(self, documents: list[dict]):
         self.documents = documents
@@ -58,7 +58,7 @@ class SemanticSearch:
         return self.build_embeddings(documents)
 
     def search(self, query: str, limit: int):
-        if self.embeddings is None:
+        if self.embeddings is None or self.documents is None:
             raise ValueError("No embeddings loaded. Call `load_or_create_embeddings` first.")
 
         query_embedding = self.generate_embedding(query)
@@ -102,8 +102,8 @@ def semantic_chunk_text(text: str, max_chunk_size: int = 4, overlap: int = 0) ->
     step = max_chunk_size - overlap
     while start < len(sentences):
         chunk_sentences = sentences[start : start + max_chunk_size]
-        # Avoid a trailing 1-sentence overlap-only chunk.
-        if start > 0 and len(chunk_sentences) == 1:
+        # Skip only a tail fully covered by the previous chunk's overlap.
+        if start > 0 and len(chunk_sentences) <= overlap:
             break
         chunk_text = " ".join(chunk_sentences).strip()
         if chunk_text:
@@ -232,7 +232,7 @@ def verify_model() -> None:
 
 def embed_text(text: str) -> list[float]:
     semantic_search = SemanticSearch()
-    return semantic_search.generate_embedding(text)
+    return semantic_search.generate_embedding(text).tolist()
 
 
 def embed_query_text(query: str) -> None:

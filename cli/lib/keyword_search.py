@@ -1,11 +1,10 @@
+import math
 import os
 import pickle
-import math
 from collections import Counter, defaultdict
 
 from .constants import BM25_K1
-from .search_utils import BM25_B, CACHE_DIR, load_movies
-from .search_utils import tokenize_text
+from .search_utils import BM25_B, CACHE_DIR, load_movies, tokenize_text
 
 
 class InvertedIndex:

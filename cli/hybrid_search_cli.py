@@ -10,9 +10,8 @@ import time
 
 from dotenv import load_dotenv
 from lib.hybrid_search import HybridSearch
-from openai import OpenAI
-from openai import OpenAIError
 from lib.search_utils import load_movies
+from openai import OpenAI, OpenAIError
 from sentence_transformers import CrossEncoder
 
 
@@ -95,7 +94,7 @@ Query: "{query}"
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "user", "content": prompt}],
         )
         enhanced = response.choices[0].message.content or ""
@@ -144,7 +143,7 @@ Give me ONLY the number in your response, no other text or explanation.
 Score:"""
         try:
             response = client.chat.completions.create(
-                model="llama-3.1-8b-instant",
+                model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
                 messages=[{"role": "user", "content": prompt}],
             )
             raw_text = response.choices[0].message.content or ""
@@ -195,7 +194,7 @@ Return ONLY the IDs in order of relevance (best match first). Return a valid JSO
 """
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "user", "content": prompt}],
         )
         raw = (response.choices[0].message.content or "").strip()
@@ -287,7 +286,7 @@ Return ONLY the scores in the same order you were given the documents. Return a 
 
     try:
         response = client.chat.completions.create(
-            model="llama-3.1-8b-instant",
+            model=os.environ.get("GROQ_MODEL", "openai/gpt-oss-20b"),
             messages=[{"role": "user", "content": prompt}],
         )
         raw = (response.choices[0].message.content or "").strip()
